@@ -153,22 +153,105 @@ async function processChunk(workDir, chunkFiles, offset) {
   const contents = [];
 
   contents.push({
-    text: `Tumi ekta academic notebook/assignment-er scanned ba handwritten page gulo
-dekhe table of contents (index) banacho.
+    text: `You are a world-class academic document analyst specializing in
+extracting structured table of contents from ANY type of academic PDF —
+whether handwritten assignments, typed lab reports, printed research papers,
+project reports, or scanned notebooks.
 
-Niche ${chunkFiles.length}ti consecutive page deওয়া ache, protyekta tar real page
-number diye label kora.
+You will receive ${chunkFiles.length} consecutive pages, each labeled with
+its REAL page number. Study each page image with full attention.
 
-Protyek page e check koro: notun kono MAIN TOPIC, HEADING, ba SECTION TITLE shuru
-hocche kina (jemon: underline kora title, bold heading, "Classification of X",
-numbered topic, etc). Ek page e EKADHIK heading thakte pare — shob koyta i alada
-alada entry hisebe dao, same page number diye. Continuation text, diagram label,
-ba sub-bullet detail guloke heading hisebe dhorba na.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STEP 1 — IDENTIFY THE DOCUMENT TYPE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+First, decide what kind of document you are looking at:
 
-"level": 0 = main heading, 1 = sub-heading, 2 = sub-sub-heading (visual
-hierarchy — underline, numbering, indentation dekhe bujhe nio).
+TYPE A — HANDWRITTEN / SCANNED NOTEBOOK:
+Pages have hand-drawn text, pencil or pen writing, physical notebook paper,
+scanned or photographed pages.
 
-Kono page e notun heading na thakle, sheta array e add korba na.`
+TYPE B — TYPED / PRINTED / DIGITAL PDF:
+Pages have computer-generated text, uniform fonts, printed paper, clean
+formatting with bold/italic/size variations.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STEP 2 — HEADING DETECTION BY TYPE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FOR TYPE A (Handwritten):
+
+LEVEL 0 signals — Main Heading:
+• Text with a physical underline drawn beneath it
+• Text preceded by a box symbol, star, square, 凸, 田, or any drawn marker
+• A topic name written alone at the top of a new section with space around it
+• Text written with noticeably heavier pen pressure or larger size
+• A subject title that clearly starts a brand new topic
+
+LEVEL 1 signals — Sub-Heading:
+• Lines starting with * or ** before a phrase
+• Lines starting with (1), (2)... or §1, Part A as section markers
+• An underlined phrase introducing a sub-topic inside a main section
+
+LEVEL 2 signals — Sub-Sub-Heading:
+• Underlined or numbered titles nested inside a sub-section
+• Named theories, named types, named categories that have their own content
+
+FOR TYPE B (Typed/Printed):
+
+LEVEL 0 signals — Main Heading:
+• Text in a significantly larger font than body text
+• BOLD text that stands alone on its own line
+• ALL CAPS text used as a section title
+• Chapter titles: "Chapter 1:", "CHAPTER ONE", "Unit 3" etc.
+• Text centered on the page as a standalone heading
+
+LEVEL 1 signals — Sub-Heading:
+• Numbered sections: 1.1, 2.3, Section 3, Part B
+• Bold or underlined phrases at the start of a new sub-section
+• Headings one size smaller than level 0
+
+LEVEL 2 signals — Sub-Sub-Heading:
+• Sub-numbered items: 1.1.1, 2.3.4 that have their own content block
+• Named subsections with bold or italic formatting
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STEP 3 — WHAT TO ALWAYS EXCLUDE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+NEVER include these as headings regardless of document type:
+
+✗ Body text — any sentence that explains, describes, or continues a topic
+✗ Numbered content points — "1. Allows body growth...", "2. Helps in..."
+  These are LIST ITEMS inside body text, not headings
+✗ Figure and diagram labels — "Fig: Air Sac", "Figure 3.1", "Diagram A"
+✗ Table contents — cells inside comparison or data tables
+✗ Taxonomy / Classification lists — Kingdom, Phylum, Class, Order, Family,
+  Genus, Species lines (unless explicitly announced as a new section title)
+✗ Annotations — arrows, labels drawn inside diagrams
+✗ Page headers / footers — repeated university name, subject code, page number
+✗ References / Bibliography entries
+✗ Sentences that are clearly continuation from the previous page
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STEP 4 — FINAL DECISION TEST
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Before adding any item, ask yourself ONE question:
+
+"If a student opened this document to find a specific topic, would they
+ look for THIS EXACT TEXT in the Table of Contents?"
+
+YES → include it with the correct level
+NO or UNSURE → skip it
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OUTPUT RULES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Use the EXACT page number from the --- PAGE N --- label above each image
+2. One page can have MULTIPLE headings — give each a separate entry with the
+   SAME page number
+3. Copy the heading text EXACTLY as it appears — no paraphrasing, no adding
+   words like "Introduction to..." or "Overview of..."
+4. Return ONLY the raw JSON array — no explanation, no markdown code blocks,
+   no preamble, nothing else before or after the array`
   });
 
   chunkFiles.forEach((file, idx) => {
