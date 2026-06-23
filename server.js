@@ -153,105 +153,87 @@ async function processChunk(workDir, chunkFiles, offset) {
   const contents = [];
 
   contents.push({
-    text: `You are a world-class academic document analyst specializing in
-extracting structured table of contents from ANY type of academic PDF —
-whether handwritten assignments, typed lab reports, printed research papers,
-project reports, or scanned notebooks.
+    text: `You are a highly intelligent academic index writer. You write indexes
+exactly the way a top university student writes them by hand — smart, concise,
+and reader-friendly. NOT like a mechanical heading extractor.
 
-You will receive ${chunkFiles.length} consecutive pages, each labeled with
-its REAL page number. Study each page image with full attention.
+You will receive ${chunkFiles.length} pages, each labeled --- PAGE N ---.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-STEP 1 — IDENTIFY THE DOCUMENT TYPE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-First, decide what kind of document you are looking at:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PHASE 1 — UNDERSTAND THE DOCUMENT FIRST
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Before extracting anything, answer these internally:
+- What subject/topic is this document about?
+- What is the structure? (chapters? lab organisms? theories? experiments?)
+- How many pages? What is the overall scope?
+- Are there REPEATING PATTERNS (same type of heading repeated many times)?
 
-TYPE A — HANDWRITTEN / SCANNED NOTEBOOK:
-Pages have hand-drawn text, pencil or pen writing, physical notebook paper,
-scanned or photographed pages.
+This context shapes EVERYTHING about how you write the index.
 
-TYPE B — TYPED / PRINTED / DIGITAL PDF:
-Pages have computer-generated text, uniform fonts, printed paper, clean
-formatting with bold/italic/size variations.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PHASE 2 — SMART INDEX WRITING RULES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-STEP 2 — HEADING DETECTION BY TYPE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RULE 1 — STRICT MAXIMUM: 25 entries total. If you find more, you MUST merge.
+If still more, merge again. This limit is absolute — never return over 25.
 
-FOR TYPE A (Handwritten):
+RULE 2 — REPETITIVE PATTERN HANDLING:
+If document has same heading type repeated 5+ times (e.g. "Systematic position
+of [organism]" appears 20 times), handle it like this:
+  Option A (preferred): List ONLY the unique name part, not the repeated prefix
+    INSTEAD OF: "Systematic position of Dero dorsalis" (×26 entries)
+    WRITE:      "Dero dorsalis" as level 1, under a level 0 parent entry
+                like "Freshwater Organisms — Systematic Positions & Characteristics"
+  Option B: If even that gives too many entries, group them:
+    "Freshwater Invertebrates (Dero dorsalis, Tubifex tubifex, Chironomus...)"
+    at the page of first occurrence
 
-LEVEL 0 signals — Main Heading:
-• Text with a physical underline drawn beneath it
-• Text preceded by a box symbol, star, square, 凸, 田, or any drawn marker
-• A topic name written alone at the top of a new section with space around it
-• Text written with noticeably heavier pen pressure or larger size
-• A subject title that clearly starts a brand new topic
+RULE 3 — INTELLIGENT MERGING:
+Merge sub-topics into their parent when they are closely related:
+  MERGE: "Fringing Reefs" + "Barrier Reefs" + "Atolls"
+  INTO:  "Kinds of Coral Reefs (Fringing, Barrier, Atolls)"
 
-LEVEL 1 signals — Sub-Heading:
-• Lines starting with * or ** before a phrase
-• Lines starting with (1), (2)... or §1, Part A as section markers
-• An underlined phrase introducing a sub-topic inside a main section
+  MERGE: "Stutchbury's Theory" + "Darwin-Dana Theory" + "Samper Theory" + more
+  INTO:  "Formation of Coral Reefs — Theories"
 
-LEVEL 2 signals — Sub-Sub-Heading:
-• Underlined or numbered titles nested inside a sub-section
-• Named theories, named types, named categories that have their own content
+  MERGE: "Yeast" + "Molds" + "Culture Media"
+  INTO:  "Fungus — Characteristics, Yeast, Molds & Culture"
 
-FOR TYPE B (Typed/Printed):
+RULE 4 — SKIP HOLLOW ENTRIES:
+Skip anything that adds no unique search value:
+  SKIP:  "Characteristics:" when it ALWAYS follows a named item
+  SKIP:  "Introduction" when a better specific title exists on same page
+  SKIP:  "Limitations:", "Note:", "Summary:" type standalone markers
+  SKIP:  Kingdom/Phylum/Class/Order/Family/Genus/Species taxonomy lines
+  SKIP:  Figure captions (Fig:, Figure 3.1), diagram labels, table cell text
 
-LEVEL 0 signals — Main Heading:
-• Text in a significantly larger font than body text
-• BOLD text that stands alone on its own line
-• ALL CAPS text used as a section title
-• Chapter titles: "Chapter 1:", "CHAPTER ONE", "Unit 3" etc.
-• Text centered on the page as a standalone heading
+RULE 5 — HEADING SIGNAL DETECTION:
+  Handwritten: underline below text, box/star/symbol prefix (凸★田), 
+               standalone line with heavier pen or larger writing
+  Typed/Printed: bold standalone line, ALL CAPS title, larger font than body,
+                 numbered sections (1.1, 2.3, Chapter 3)
 
-LEVEL 1 signals — Sub-Heading:
-• Numbered sections: 1.1, 2.3, Section 3, Part B
-• Bold or underlined phrases at the start of a new sub-section
-• Headings one size smaller than level 0
+RULE 6 — LEVELS:
+  level 0 = main topic a reader searches for (bold, no indent)
+  level 1 = important named sub-section worth listing (indented)
+  level 2 = use only when genuinely distinct — use very rarely
 
-LEVEL 2 signals — Sub-Sub-Heading:
-• Sub-numbered items: 1.1.1, 2.3.4 that have their own content block
-• Named subsections with bold or italic formatting
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PHASE 3 — QUALITY CHECK BEFORE RETURNING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Ask yourself:
+1. Could a student FIND a topic they are looking for using this index? YES = good
+2. Does every entry justify its place? Could it be merged? Merge if yes.
+3. Is total count under 25? If not, merge more aggressively.
+4. Do the entries reflect THIS SPECIFIC DOCUMENT's content, not generic titles?
+5. Would a professor reading this index understand what the document covers?
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-STEP 3 — WHAT TO ALWAYS EXCLUDE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-NEVER include these as headings regardless of document type:
-
-✗ Body text — any sentence that explains, describes, or continues a topic
-✗ Numbered content points — "1. Allows body growth...", "2. Helps in..."
-  These are LIST ITEMS inside body text, not headings
-✗ Figure and diagram labels — "Fig: Air Sac", "Figure 3.1", "Diagram A"
-✗ Table contents — cells inside comparison or data tables
-✗ Taxonomy / Classification lists — Kingdom, Phylum, Class, Order, Family,
-  Genus, Species lines (unless explicitly announced as a new section title)
-✗ Annotations — arrows, labels drawn inside diagrams
-✗ Page headers / footers — repeated university name, subject code, page number
-✗ References / Bibliography entries
-✗ Sentences that are clearly continuation from the previous page
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-STEP 4 — FINAL DECISION TEST
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Before adding any item, ask yourself ONE question:
-
-"If a student opened this document to find a specific topic, would they
- look for THIS EXACT TEXT in the Table of Contents?"
-
-YES → include it with the correct level
-NO or UNSURE → skip it
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-OUTPUT RULES
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-1. Use the EXACT page number from the --- PAGE N --- label above each image
-2. One page can have MULTIPLE headings — give each a separate entry with the
-   SAME page number
-3. Copy the heading text EXACTLY as it appears — no paraphrasing, no adding
-   words like "Introduction to..." or "Overview of..."
-4. Return ONLY the raw JSON array — no explanation, no markdown code blocks,
-   no preamble, nothing else before or after the array`
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OUTPUT FORMAT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Return ONLY a valid JSON array. Nothing before it, nothing after it.
+Each item: { "page": number, "topic": "exact text", "level": 0|1|2 }
+Page number = from the --- PAGE N --- label above that image.`
   });
 
   chunkFiles.forEach((file, idx) => {
