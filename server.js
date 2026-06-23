@@ -109,8 +109,17 @@ app.post('/api/generate-index', upload.single('pdf'), async (req, res) => {
 
     allTopics.sort((a, b) => a.page - b.page);
 
-    // Post-process: enforce max 25 entries programmatically.
-    // Prompt-based limits don't work because each chunk processes independently.
+    // Dedup: same topic on consecutive pages = Gemini detected it twice.
+    // Keep only the first occurrence (case-insensitive, punctuation-stripped).
+    const seenTopics = new Set();
+    allTopics = allTopics.filter(item => {
+      const key = item.topic.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (seenTopics.has(key)) return false;
+      seenTopics.add(key);
+      return true;
+    });
+
+    // Enforce max 25 entries after deduplication.
     allTopics = enforceMaxEntries(allTopics, 25);
 
     const responsePayload = {
