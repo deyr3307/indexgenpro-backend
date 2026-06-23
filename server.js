@@ -109,8 +109,7 @@ app.post('/api/generate-index', upload.single('pdf'), async (req, res) => {
 
     allTopics.sort((a, b) => a.page - b.page);
 
-    // Dedup: same topic on consecutive pages = Gemini detected it twice.
-    // Keep only the first occurrence (case-insensitive, punctuation-stripped).
+    // Dedup Step 1: Remove duplicate topics (same heading on consecutive pages).
     const seenTopics = new Set();
     allTopics = allTopics.filter(item => {
       const key = item.topic.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -119,8 +118,18 @@ app.post('/api/generate-index', upload.single('pdf'), async (req, res) => {
       return true;
     });
 
-    // Enforce max 25 entries after deduplication.
-    allTopics = enforceMaxEntries(allTopics, 25);
+    // Dedup Step 2: Remove duplicate page numbers — keep only the FIRST
+    // (most prominent) heading per page. This eliminates sub-headings that
+    // appear on the same page as a main heading.
+    const seenPages = new Set();
+    allTopics = allTopics.filter(item => {
+      if (seenPages.has(item.page)) return false;
+      seenPages.add(item.page);
+      return true;
+    });
+
+    // Enforce max 20 entries as final safety net.
+    allTopics = enforceMaxEntries(allTopics, 20);
 
     const responsePayload = {
       success: true,
@@ -166,62 +175,66 @@ async function processChunk(workDir, chunkFiles, offset) {
   const contents = [];
 
   contents.push({
-    text: `You are an academic index extractor. Extract the main structural headings
-from these ${chunkFiles.length} academic pages exactly as they appear.
+    text: `You are an academic index extractor. Your ONLY job is to find the CORE MAIN
+HEADINGS from these ${chunkFiles.length} academic pages.
 
-Each page is labeled --- PAGE N --- above its image. That number is the page number.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-GOLDEN RULE — MOST IMPORTANT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Extract headings EXACTLY as written in the document.
-DO NOT rename them. DO NOT summarize. DO NOT create new category names.
-DO NOT group organisms into phyla unless that grouping is a heading in the document.
-
-CORRECT: "Systematic Position of Dero dorsalis"  ← extract as written
-WRONG:   "Dero dorsalis"                          ← you renamed it
-WRONG:   "Annelida (Segmented Worms)"             ← you invented a category
+Each page is labeled --- PAGE N --- above its image. Use that exact number.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-WHAT TO EXTRACT
+THE SINGLE MOST IMPORTANT RULE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-For HANDWRITTEN pages, extract:
-- Underlined standalone titles
-- Text with box/star/square prefix: 凸 田 ★ ☐
-- Text that clearly starts a new topic (written at top, heavier pen, larger size)
+Return ONLY level 0 main headings. NEVER return sub-headings.
+NEVER return level 1 or level 2 items. Only the top-level main heading.
 
-For TYPED/PRINTED pages, extract:
-- Bold text standing alone on its own line
-- ALL CAPS standalone titles
-- Section/chapter titles: "Chapter 3", "Section 2.1", "Unit 4"
-- Centered titles on their own line
+If a page has ONE main heading and THREE sub-headings below it,
+return ONLY the main heading. Skip all three sub-headings entirely.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-WHAT TO ALWAYS SKIP
+WHAT IS A MAIN HEADING (level 0) — EXTRACT THESE:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-SKIP these no matter what — they are NOT headings:
-- Generic repeated sub-labels: "Characteristics:", "Description:", "Notes:",
-  "Observation:", "Result:", "Discussion:" — these are section labels, not topics
-- Body paragraph text and explanation sentences
-- "1. Allows body growth..." "2. Helps in..." — numbered list content
-- Figure captions: "Fig:", "Figure 3.1", "fig. Asconoid"
-- Taxonomy classification lines: Kingdom, Phylum, Class, Order, Family, Genus, Species
-- Arrow labels and annotations inside drawn diagrams
-- Table cell contents and comparison table rows
-- Page headers / footers / university name repeated at top or bottom
+TYPED/PRINTED pages:
+- Bold text standing alone on its own line, clearly larger or more prominent
+- Chapter/section titles: "Chapter 1", "Section 3", "Unit 4"
+- ALL CAPS standalone title line
+- The FIRST and MOST PROMINENT title on any page
+
+HANDWRITTEN pages:
+- Underlined standalone title (single or double underline)
+- Text with a special symbol prefix: 凸 田 ★ ☐
+- The most prominent title written at the start of a new topic
+- Text with noticeably heavier pen pressure or larger writing
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-LEVELS
+WHAT TO ABSOLUTELY NEVER INCLUDE:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-level 0 = primary heading (starts a new main section)
-level 1 = named sub-section heading with real distinct content
-level 2 = use only when clearly necessary
+- Numbered sub-items: "1. The Perfect Illusion", "2. Cracks in the Illusion"
+- Sub-headings below the main heading on the same page
+- Any item that appears UNDER or INSIDE a main section
+- Body text, paragraph sentences, explanations
+- "Characteristics:", "Description:", "Notes:", "Observation:"
+- Figure captions, diagram labels (Fig:, Figure 3.1)
+- Taxonomy lines (Kingdom, Phylum, Class, Order, Family, Genus, Species)
+- Table cell contents
+- Page headers/footers/university name
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+KEY PRINCIPLE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Think of it this way: if you were making a chapter list for a textbook,
+what would you write? ONLY those chapter-level topics. Nothing else.
+
+One page may have ONLY one main heading to extract.
+If a page has NO main heading (it is continuation text), extract nothing.
+
+Always set level to 0 for everything you return.
+Extract the topic text EXACTLY as written — do not rename or summarize.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 OUTPUT
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Return ONLY a valid JSON array. No explanation, no markdown, nothing else.
-Each item: { "page": N, "topic": "exact text as written", "level": 0|1|2 }`
+Return ONLY a valid JSON array. Nothing before it, nothing after.
+Every item must have level: 0.
+Example: [{"page":1,"topic":"Gases & Their Characteristics","level":0}]`
   });
 
   chunkFiles.forEach((file, idx) => {
