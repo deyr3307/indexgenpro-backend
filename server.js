@@ -128,8 +128,17 @@ app.post('/api/generate-index', upload.single('pdf'), async (req, res) => {
       return true;
     });
 
-    // Enforce max 20 entries as final safety net.
-    allTopics = enforceMaxEntries(allTopics, 20);
+    // Sanitize: allow ONLY <em> and </em> tags in topic text (for scientific names).
+    // Strip any other HTML that Gemini might accidentally add.
+    allTopics = allTopics.map(item => ({
+      ...item,
+      topic: item.topic
+        .replace(/<(?!\/?em>)[^>]*>/gi, '')   // remove all tags except <em>
+        .trim()
+    }));
+
+    // Hard limit: max 15 entries for guaranteed 1-page fit.
+    allTopics = enforceMaxEntries(allTopics, 15);
 
     const responsePayload = {
       success: true,
@@ -175,66 +184,84 @@ async function processChunk(workDir, chunkFiles, offset) {
   const contents = [];
 
   contents.push({
-    text: `You are an academic index extractor. Your ONLY job is to find the CORE MAIN
-HEADINGS from these ${chunkFiles.length} academic pages.
+    text: `You are a masterclass academic index analyst. Your task: study these
+${chunkFiles.length} pages and extract ONLY the core chapter-level main headings
+for a professional one-page academic index.
 
 Each page is labeled --- PAGE N --- above its image. Use that exact number.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-THE SINGLE MOST IMPORTANT RULE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Return ONLY level 0 main headings. NEVER return sub-headings.
-NEVER return level 1 or level 2 items. Only the top-level main heading.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PHASE 1 — UNDERSTAND THE DOCUMENT CONTEXT FIRST
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Before extracting anything, identify:
+- What subject/discipline is this? (Biology, Chemistry, Physics, etc.)
+- What type of document? (Assignment, Lab Report, Project, Research Paper)
+- What is the core theme? (e.g. freshwater organisms, ideal gas laws, etc.)
 
-If a page has ONE main heading and THREE sub-headings below it,
-return ONLY the main heading. Skip all three sub-headings entirely.
+This shapes which headings are TRULY core and which are just sub-details.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-WHAT IS A MAIN HEADING (level 0) — EXTRACT THESE:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-TYPED/PRINTED pages:
-- Bold text standing alone on its own line, clearly larger or more prominent
-- Chapter/section titles: "Chapter 1", "Section 3", "Unit 4"
-- ALL CAPS standalone title line
-- The FIRST and MOST PROMINENT title on any page
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PHASE 2 — STRICT EXTRACTION RULES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-HANDWRITTEN pages:
-- Underlined standalone title (single or double underline)
-- Text with a special symbol prefix: 凸 田 ★ ☐
-- The most prominent title written at the start of a new topic
-- Text with noticeably heavier pen pressure or larger writing
+RULE 1 — LEVEL 0 ONLY. Return NOTHING else.
+Extract only the PRIMARY CHAPTER-LEVEL heading from each page.
+Never extract sub-headings, numbered sub-items, or secondary headings.
+If a page has 1 main heading + 3 sub-headings → return ONLY the 1 main heading.
+If a page has NO main heading (pure continuation text) → return nothing.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-WHAT TO ABSOLUTELY NEVER INCLUDE:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-- Numbered sub-items: "1. The Perfect Illusion", "2. Cracks in the Illusion"
-- Sub-headings below the main heading on the same page
-- Any item that appears UNDER or INSIDE a main section
-- Body text, paragraph sentences, explanations
-- "Characteristics:", "Description:", "Notes:", "Observation:"
-- Figure captions, diagram labels (Fig:, Figure 3.1)
-- Taxonomy lines (Kingdom, Phylum, Class, Order, Family, Genus, Species)
-- Table cell contents
-- Page headers/footers/university name
+RULE 2 — STRICT MAXIMUM: 15 entries total.
+This is a hard limit. If you find more, keep only the most important ones.
+Prefer headings that introduce NEW topics over those that continue old ones.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-KEY PRINCIPLE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Think of it this way: if you were making a chapter list for a textbook,
-what would you write? ONLY those chapter-level topics. Nothing else.
+RULE 3 — SCIENTIFIC NAMES: Write them exactly as they appear.
+Preserve the exact capitalization of scientific names (Genus species format).
+Example: "Systematic position of Dero dorsalis" — write it exactly like this.
+Do not change "Dero dorsalis" to "dero dorsalis" or "DERO DORSALIS".
 
-One page may have ONLY one main heading to extract.
-If a page has NO main heading (it is continuation text), extract nothing.
+RULE 4 — EXTRACT EXACTLY AS WRITTEN. Do not rename, summarize, or invent.
+Wrong: "Introduction" when the page says "Gases & Their Characteristics"
+Right: "Gases & Their Characteristics"
 
-Always set level to 0 for everything you return.
-Extract the topic text EXACTLY as written — do not rename or summarize.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PHASE 3 — HEADING DETECTION BY DOCUMENT TYPE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-OUTPUT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Return ONLY a valid JSON array. Nothing before it, nothing after.
-Every item must have level: 0.
-Example: [{"page":1,"topic":"Gases & Their Characteristics","level":0}]`
+TYPED/PRINTED DOCUMENTS:
+Main heading signals (extract these):
+  - Bold text standing completely alone on its own line
+  - ALL CAPS standalone title
+  - Chapter/Section labels: "Chapter 1", "Section 3", "Unit 4"
+  - The single most visually prominent title at top of a new section
+
+NOT headings (never extract):
+  - "1. The Perfect Illusion" — numbered sub-items inside a section
+  - "From Perfect Theories to Messy Realities" — sub-taglines below main title
+  - Any text below or indented under the main heading
+
+HANDWRITTEN/SCANNED DOCUMENTS:
+Main heading signals (extract these):
+  - Text with underline drawn beneath it
+  - Text preceded by box symbol, star, or square: 凸 田 ★ ☐
+  - Topic name written at the start of a new section with heavier pen
+
+NOT headings (never extract):
+  - "Characteristics:" — generic label
+  - "1. Allows body growth..." — numbered content points
+  - Taxonomy lines: Kingdom / Phylum / Class / Order / Family / Genus / Species
+
+ALWAYS SKIP regardless of type:
+  - Body paragraph text
+  - Figure captions: "Fig:", "Figure 3.1", "fig. Asconoid"
+  - Table cell contents
+  - Annotations inside diagrams
+  - Page headers/footers/university name
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OUTPUT — RETURN ONLY THIS JSON ARRAY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[{"page": N, "topic": "Exact heading text", "level": 0}]
+Every item must have level: 0. Maximum 15 items. Nothing before or after.`
   });
 
   chunkFiles.forEach((file, idx) => {
